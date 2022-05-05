@@ -1,0 +1,18 @@
+This is a group of 5 members and I am very delighted and impress to work with my members because I got to learn and experienced new 
+technology specially in the Data Engineering. Nevertheless, I will be always greatfull for this opportunity.
+
+Now, In this project, we are basically producing a report by creating a dashboard in Tableau regarding crime rate in Yorshire and Humber, England.
+The purpose of the project is to help the police department for allocation of resrouces and police force efficiently.  
+
+HADOOP is the main technology was implemented during development.
+Tools:
+  R language
+  SparkR via Zeppelin
+  HIVE (jdbc)
+  Tableau
+
+Concepts:
+  Constellation Schema
+  Star Schema
+  data marts
+  Hive external tables
