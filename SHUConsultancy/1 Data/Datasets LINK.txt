@@ -1,2 +1,6 @@
-Since the size of data large, instead of loading the data here, I have given 
-the websites links from where the data is gathered. 
+Since the size of data large, instead of loading the datasets here, I have given the websites links from where the datasets is gathered. 
+A: https://cy.ons.gov.uk/peoplepopulationandcommunity/crimeandjustice/datasets/crimeinenglandandwalesquarterlydatatables
+B: https://www.ukcrimestats.com/National_Picture/
+C: https://www.opendatani.gov.uk/dataset/police-recorded-crime-in-northern-ireland
+D: https://www.ukcrimestats.com/
+E: https://www.gov.scot/collections/recorded-crime-in-scotland/
