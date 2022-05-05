@@ -1,0 +1,45 @@
+%spark2.r
+#----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#**********************************	Author: ADMP Group 6	******************************************
+#**********************************	Date  : 14 Apr 2022	    ******************************************
+#----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#Section 1: EXTRACT DATA FROM HDFS TO SPARK
+#----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+#Section 1.1 - Loading UNEMPLOYMENT CSV from Maria_Dev HDFS Location
+unemp <- read.df(sqlContext, "/user/maria_dev/DataStaging/UnemploymentRate_YorkAll.csv", "com.databricks.spark.csv", header="FALSE", inferSchema = "true")
+
+#Assign appropriate column names to data frame
+colnames(unemp)=c('TimePeriod','UnemploymentRate')
+#----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+#Section 1.2 - Loading UK CRIME STATISTICS CSV from Maria_Dev HDFS Location
+ukc <- read.df(sqlContext, "/user/maria_dev/DataStaging/UKCrimeStats.csv", "com.databricks.spark.csv", header="true", inferSchema = "true")
+
+#Assign appropriate column names to data frame
+colnames(ukc)=c('Country','Year', 'Month', 'NoofCrimes')
+#----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+#Section 1.3 - Loading Stop Search CSV from Maria_Dev HDFS Location
+ssf <- read.df(sqlContext, "/user/maria_dev/DataStaging/StopSearch_Final.csv", "com.databricks.spark.csv", header="true", inferSchema = "true")
+#----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+#Section 1.4 - Loading Street Crime CSV from Maria_Dev HDFS Location
+scf1 <- read.df(sqlContext, "/user/maria_dev/DataStaging/Street_Final_1.csv", "com.databricks.spark.csv", header="true", inferSchema = "true")
+scf2 <- read.df(sqlContext, "/user/maria_dev/DataStaging/Street_Final_2.csv", "com.databricks.spark.csv", header="true", inferSchema = "true")
+
+#HDFS limited to 200MB file upload. Actual file is ~375MB. Hence, File is split and appended in Spark
+scf=rbind(scf1,scf2)
+
+rm(scf1,scf2)
+#----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+#Section 1.5 - Loading Outcome CSV from Maria_Dev HDFS Location
+oc1 <- read.df(sqlContext, "/user/maria_dev/DataStaging/Outcome_Final_1.csv", "com.databricks.spark.csv", header="true", inferSchema = "true")
+oc2 <- read.df(sqlContext, "/user/maria_dev/DataStaging/Outcome_Final_2.csv", "com.databricks.spark.csv", header="true", inferSchema = "true")
+
+#HDFS limited to 200MB file upload. Actual file is ~375MB. Hence, File is split and appended in Spark
+oc=rbind(oc1, oc2)
+
+rm(oc1, oc2)
+#----------------------------------------------------------------------------------------------------------------------------------------------------------------------

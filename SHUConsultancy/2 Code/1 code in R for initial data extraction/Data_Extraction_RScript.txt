@@ -1,0 +1,109 @@
+#----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#**********************************	Author: ADMP Group 6	******************************************
+#**********************************	Date  : 11 Apr 2022	******************************************
+#----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#Section 1: Code Execution time tracker --> Start time of this code execution
+
+print(format(Sys.time(), "%a %b %d %X %Y"))
+#----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#Section 2: Setting Directory to read input files and writing output files
+
+#Please change this directory as per your files location
+directory="C:\\Users\\LabStudent-55-706949\\Desktop\\BDDS Files\\Jack_ADMP"
+setwd(paste0(directory))
+
+subdir="2_Output"
+
+#Checks folder existence and create if the folder doesnt exist
+ifelse(!dir.exists(file.path(directory,subdir)), dir.create(file.path(directory, subdir)), FALSE)
+
+#If folder already exist, it will deletes files inside it.
+unlink(paste0(directory,"\\",subdir,"\\*"))
+
+rm(subdir)
+#----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#Section 3: Capture folders names as a list to navigate in reading multiple CSV files across Folders
+
+setwd(file.path(directory,"\\1_Input"))
+
+Timeperiod = list.files()
+Timeperiod = Timeperiod[1:26]
+print("Time period under consideration")
+print(Timeperiod)
+
+#---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#**********************************	Crime Data source		******************************************
+#Section 5: Reading CSVs from folders Jan 2020 to Feb 2022 downloaded from UK police website.
+
+#Create Empty Data frames for appending the monthly data to base data
+Street_Final <- data.frame(matrix(vector(),ncol=12))
+Outcome_Final <- data.frame(matrix(vector(),ncol=10))
+StopSearch_Final <- data.frame(matrix(vector(),ncol=16))
+
+
+#Giving appropriate column names to above empty data frames
+colnames(Street_Final) <- c('CrimeID','Month','Reportedby','Fallswithin','Longitude','Latitude','Location','LSOAcode','LSOAname','Crimetype','Lastoutcomecategory','Context')
+colnames(Outcome_Final) <- c('CrimeID','Month','Reportedby','Fallswithin','Longitude','Latitude','Location','LSOAcode','LSOAname','Outcometype')
+colnames(StopSearch_Final) <- c('Type','Date','Partofapolicingoperation','Policingoperation','Latitude','Longitude','Gender','Agerange','Selfdefinedethnicity','Officerdefinedethnicity','Legislation','Objectofsearch','Outcome','Outcomelinkedtoobjectofsearch','Removalofmorethanjustouterclothing','Fallswithin')
+
+#Create a vector to read specific region files from every folders (Jan 2020 - Feb 2022)
+Region <- c('humberside','north-yorkshire','south-yorkshire','west-yorkshire')
+
+#For loop which reads csv of specific region in 2 level
+#First 'i' loop --> navigates through time period folders
+#Second 'j' loop --> Reads specific region files across time period folders
+for (i in 1:length(Timeperiod)) {
+  
+  #Assign changing folder name
+  folder=Timeperiod[i]
+  print('Reading CSVs from year folder')
+  print(folder)
+  
+  #Directory Assign where file are placed
+  setwd(file.path(directory,"\\1_Input\\",folder))
+  
+  for(j in 1:length(Region)) {
+    
+    Street=read.csv(file=paste0(folder,"-",Region[j],"-street.csv"),header=TRUE)
+    print(paste0(folder,"-",Region[j],"-street.csv"))
+    colnames(Street) <- c('CrimeID','Month','Reportedby','Fallswithin','Longitude','Latitude','Location','LSOAcode','LSOAname','Crimetype','Lastoutcomecategory','Context')
+    Street_Final=rbind(Street_Final,Street)
+    
+    Outcome=read.csv(file=paste0(folder,"-",Region[j],"-outcomes.csv"),header=TRUE)
+    colnames(Outcome) <- c('CrimeID','Month','Reportedby','Fallswithin','Longitude','Latitude','Location','LSOAcode','LSOAname','Outcometype')
+    Outcome_Final=rbind(Outcome_Final,Outcome)
+    
+    StopSearch=read.csv(file=paste0(folder,"-",Region[j],"-stop-and-search.csv"),header=TRUE)
+    #Assign region field which is not present in Stop search CSVs
+    StopSearch$Fallswithin=unique(Street$Fallswithin)
+    colnames(StopSearch) <- c('Type','Date','Partofapolicingoperation','Policingoperation','Latitude','Longitude','Gender','Agerange','Selfdefinedethnicity','Officerdefinedethnicity','Legislation','Objectofsearch','Outcome','Outcomelinkedtoobjectofsearch','Removalofmorethanjustouterclothing','Fallswithin')
+    StopSearch_Final=rbind(StopSearch_Final,StopSearch)
+    
+rm(Street, Outcome, StopSearch)
+  }
+  
+}
+
+#deleting intermediate files to save processing memory
+rm(folder, i, j, Region, Timeperiod)
+
+#HDFS Directory (Maria_Dev) doesn't allow file size more than 200MB to upload
+#Breaking files into smaller pieces to accommodate file upload
+Street_Final_1=Street_Final[1:ceiling(nrow(Street_Final)/2),]
+Street_Final_2=Street_Final[(ceiling(nrow(Street_Final)/2)+1):nrow(Street_Final),]
+
+Outcome_Final_1=Outcome_Final[1:ceiling(nrow(Outcome_Final)/2),]
+Outcome_Final_2=Outcome_Final[(ceiling(nrow(Outcome_Final)/2)+1):nrow(Outcome_Final),]
+
+rm(Street_Final, Outcome_Final)
+#----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#**********************************	Write tables to CSVs	******************************************
+#Section 11: Writing files to destination location
+setwd(file.path(directory,"\\2_Output"))
+write.table(Street_Final_1, file="Street_Final_1.csv", col.names = TRUE, sep = ',', row.names=FALSE)
+write.table(Street_Final_2, file="Street_Final_2.csv", col.names = TRUE, sep = ',', row.names=FALSE)
+write.table(Outcome_Final_1, file="Outcome_Final_1.csv", col.names = TRUE, sep = ',', row.names=FALSE)
+write.table(Outcome_Final_2, file="Outcome_Final_2.csv", col.names = TRUE, sep = ',', row.names=FALSE)
+write.table(StopSearch_Final, file="StopSearch_Final.csv", col.names = TRUE, sep = ',', row.names=FALSE)
+
+rm(Street_Final_1, Street_Final_2, Outcome_Final_1, Outcome_Final_2, StopSearch_Final)

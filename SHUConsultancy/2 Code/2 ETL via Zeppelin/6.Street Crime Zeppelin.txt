@@ -1,0 +1,141 @@
+%spark2.r
+#----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#**********************************	Author: ADMP Group 6	******************************************
+#**********************************	Date  : 14 Apr 2022	    ******************************************
+#----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#Section 3: TRANSFORMATION STAGE - YORKSHIRE AND HUMBER STREET CRIME DATAFRAME
+#----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+#DATA VALIDITY - RECORDS BEFORE APPLYING TRANSFORMATIONS
+paste0('RECORDS BEFORE APPLYING TRANSFORMATIONS - ROWS: ',nrow(scf),' COLUMNS: ',ncol(scf))
+print("--------------------------------------------------------------------------------")
+
+#DATA TRANSFORMATION: EXTRACT DATE COLUMNS USING SUBSTRING FUNCTION
+scf$Year = substr(scf$Month, 1, 4)
+scf$Month = substr(scf$Month, 6, 7)
+
+#REMOVE ORIGINAL COLUMNS WHICH ARE NOT NEEDED
+scf$Reportedby = NULL
+scf$Fallswithin = NULL
+scf$Location = NULL
+scf$Context = NULL
+scf$Latitude = NULL
+scf$Longitude = NULL
+scf$LSOAcode = NULL
+scf$LSOAname = NULL
+
+#DATA VALIDITY - CHECK DATA TYPE OF EACH COLUMN
+print('DATA VALIDITY - CHECK DATATYPES OF EACH COLUMN')
+str(scf)
+print("--------------------------------------------------------------------------------")
+
+#DATA TRANSFORMATION: CONVERT COLUMNS DATA TYPES
+scf$Year <- SparkR::cast(scf$Year, "double")
+scf$Month <- SparkR::cast(scf$Month, "double")
+
+#DATA TRANSFORMATION: APPLY FILTER FOR ANALYSIS PERIOD GREATER THAN OR EQUAL TO 2020
+scf=subset(scf, scf$Year >= 2020)
+
+#DATA VALIDITY - RECORDS AFTER APPLYING FILTER
+paste0('RECORDS AFTER FILTERING FOR ANALYSIS PERIOD GREATER THAN OR EQUAL TO 2020 - ROWS: ',nrow(scf),' COLUMNS: ',ncol(scf))
+print("--------------------------------------------------------------------------------")
+
+#DATA VALIDITY - CHECK FREQUENCY DISTRIBUTION FOR NUMERICAL AND CATEGORICAL DATA FOR INCONSISTENCY
+print('DATA VALIDITY - CHECK FREQUENCY DISTRIBUTION FOR INCONSISTENCY')
+showDF(count(groupBy(scf, "Year")))
+print("--------------------------------------------------------------------------------")
+showDF(count(groupBy(scf, "Month")))
+print("--------------------------------------------------------------------------------")
+showDF(count(groupBy(scf, "Crimetype")))
+print("--------------------------------------------------------------------------------")
+showDF(count(groupBy(scf, "Lastoutcomecategory")))
+print("--------------------------------------------------------------------------------")
+
+#DATA VALIDITY - CHECK NULL VALUES IN EACH COLUMN IN DATA FRAME
+paste("NUMBER OF NULL RECORDS IN CRIMEID COLUMN IS: ",nrow(SparkR::filter(scf, isNull(scf$CrimeID))))
+paste("NUMBER OF NULL RECORDS IN YEAR COLUMN IS: ",nrow(SparkR::filter(scf, isNull(scf$Year))))
+paste("NUMBER OF NULL RECORDS IN MONTH COLUMN IS: ",nrow(SparkR::filter(scf, isNull(scf$Month))))
+paste("NUMBER OF NULL RECORDS IN CRIMETYPE COLUMN IS: ",nrow(SparkR::filter(scf, isNull(scf$Crimetype))))
+paste("NUMBER OF NULL RECORDS IN LASTOUTCOMECATEGORY COLUMN IS: ",nrow(SparkR::filter(scf, isNull(scf$Lastoutcomecategory))))
+print("--------------------------------------------------------------------------------")
+
+#DATA TRANSFORMATION: NULL VALUE TREATMENT
+scf$Year = ifelse(isNull(scf$Year)==TRUE, -99, scf$Year)
+scf$Month = ifelse(isNull(scf$Month)==TRUE, -99, scf$Month)
+scf$Crimetype = ifelse(isNull(scf$Crimetype)==TRUE, 'Undefined', scf$Crimetype)
+scf$Lastoutcomecategory = ifelse(isNull(scf$Lastoutcomecategory)==TRUE, 'Undefined', scf$Lastoutcomecategory)
+print("--------------------------------------------------------------------------------")
+
+#DATA TRANSFORMATION: INVALID VALUE TREATMENT
+scf$Crimetype=regexp_replace(scf$Crimetype,'NA',"Undefined")
+scf$Lastoutcomecategory=regexp_replace(scf$Lastoutcomecategory,'NA',"Undefined")
+
+#DATA TRANSFORMATION: BLANK/SPACE DETECTED --> BY FREQUENCY DISTRIBUTION
+scf$Crimetype = ifelse(trim(scf$Crimetype)=='', 'Undefined', scf$Crimetype)
+scf$Lastoutcomecategory = ifelse(trim(scf$Lastoutcomecategory)=='', 'Undefined', scf$Lastoutcomecategory)
+
+#DATA TRANSFORMATION: DELETE CRIMEID - ID VARIABLE, IF NULL IS PRESENT
+scf=dropna(scf, how = "any")
+
+#DATA TRANSFORMATION: DELETE CRIMEID VARIABLE LESS THAN STANDARD LENGTH 64
+scf$flag = ifelse(length(scf$CrimeID) < 64, 'True', 'False')
+print('DATA VALIDITY - FREQUENCY DISTRIBUTION - CRIMEID LESSTHAN 64 CHARACTERS')
+showDF(count(groupBy(scf, "flag")))
+scf=subset(scf, scf$flag == 'False')
+scf$flag = NULL
+
+#DATA VALIDITY - REMOVE NULL ID RECORDS 
+paste0('RECORDS AFTER INVALID CRIMEID REMOVAL - ROWS: ',nrow(scf),' COLUMNS: ',ncol(scf))
+print("--------------------------------------------------------------------------------")
+
+#DATA VALIDITY - CHECK FREQUENCY DISTRIBUTION FOR NUMERICAL AND CATEGORICAL DATA AFTER NULL/INVALID DATA TREATMENT
+print('DATA VALIDITY - CHECK FREQUENCY DISTRIBUTION TO VALIDATE NULL/INVALID DATA TREATMENT PERFORMED')
+showDF(count(groupBy(scf, "Year")))
+print("--------------------------------------------------------------------------------")
+showDF(count(groupBy(scf, "Month")))
+print("--------------------------------------------------------------------------------")
+showDF(count(groupBy(scf, "Crimetype")))
+print("--------------------------------------------------------------------------------")
+showDF(count(groupBy(scf, "Lastoutcomecategory")))
+print("--------------------------------------------------------------------------------")
+
+#DATA VALIDITY - CHECK DUPLICATE RECORDS
+print('DATA VALIDITY - CHECK DUPLICATE RECORDS')
+paste0("TOTAL RECORDS IN OUTCOME DATAFRAME: ",nrow(scf))
+nodup=distinct(scf)
+paste0("DUPLICATE RECORDS IN OUTCOME DATAFRAME: ",(nrow(scf)-nrow(scf)))
+print("--------------------------------------------------------------------------------")
+
+#DATA TRANSFORMATION: REMOVE DUPLICATE RECORDS
+scf=distinct(scf)
+
+#DATA VALIDITY - RECORDS AFTER DUPLICATES REMOVAL
+paste0('RECORDS AFTER DUPLICATES REMOVAL - ROWS: ',nrow(scf),' COLUMNS: ',ncol(scf))
+print("--------------------------------------------------------------------------------")
+
+#REGISTER SPARK DATAFRAME AS TEMP DATAFRAME - TO CREATE FACT DIMENSION SCHEMA CREATION
+createOrReplaceTempView(scf, "scf")
+
+#DATA TRANSFORMATION - GET LATEST OUTCOME TO STREET CRIME DATASET VIA LEFT JOIN
+streetfinal=sql("select a.*, b.Outcometype from scf a left join ocfinal b on a.CrimeID=b.CrimeID")
+
+#DATA TRANSFORMATION - CREATE OUTCOME COLUMN WHICH HAS RECENT OUTCOMES EITHER FROM OUTCOME DATAFRAME OR STREET CRIME DATAFRAME
+streetfinal$outcome = ifelse(isNull(streetfinal$Outcometype)==TRUE, streetfinal$Lastoutcomecategory, streetfinal$Outcometype)
+
+#DATA TRANSFORMATION - REMOVE UNWANTED COLUMNS
+streetfinal$Outcometype=NULL
+streetfinal$Lastoutcomecategory=NULL
+
+#DATA VALIDITY - FINAL STREET CRIME TABLE ROWS AND COLUMNS AFTER GETTING UPDATED OUTCOMES
+paste0('FINAL STREET CRIME TABLE ROWS AND COLUMNS AFTER JOINING OUTCOME DATASET - ROWS: ',nrow(streetfinal),' COLUMNS: ',ncol(streetfinal))
+print("--------------------------------------------------------------------------------")
+
+#DATA VALIDITY - FINAL STREET CRIME TABLE ROWS AND COLUMNS AFTER TRANSFORMATION STAGE
+paste0('FINAL STREET CRIME TABLE ROWS AND COLUMNS AFTER TRANSFORMATION STAGE - ROWS: ',nrow(streetfinal),' COLUMNS: ',ncol(streetfinal))
+print("--------------------------------------------------------------------------------")
+
+#REGISTER SPARK DATAFRAME AS TEMP DATAFRAME - TO CREATE FACT DIMENSION SCHEMA CREATION
+createOrReplaceTempView(streetfinal, "streetfinal")
+
+rm(scf, ocfinal)
+print("TRANSFORMATION OF STREET CRIME DATAFRAME IS COMPLETED")

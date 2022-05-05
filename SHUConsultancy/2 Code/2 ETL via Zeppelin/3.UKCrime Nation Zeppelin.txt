@@ -1,0 +1,91 @@
+%spark2.r
+#----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#**********************************	Author: ADMP Group 6	******************************************
+#**********************************	Date  : 14 Apr 2022	    ******************************************
+#----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#Section 3: TRANSFORMATION STAGE - UK CRIME STATISTICS DATAFRAME
+#----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+#DATA VALIDITY - RECORDS BEFORE APPLYING TRANSFORMATIONS
+paste0('RECORDS BEFORE APPLYING TRANSFORMATIONS - ROWS: ',nrow(ukc),' COLUMNS: ',ncol(ukc))
+print("--------------------------------------------------------------------------------")
+
+#DATA TRANSFORMATION: EXTRACT NEW COLUMNS
+#NO ACTION NEEDED
+
+#DATA TRANSFORMATION: REMOVE ORIGINAL COLUMNS WHICH ARE NOT NEEDED
+#NO ACTION NEEDED
+
+#DATA VALIDITY - CHECK DATA TYPE OF EACH COLUMN
+print('DATA VALIDITY - CHECK DATATYPES OF EACH COLUMN')
+str(ukc)
+print("--------------------------------------------------------------------------------")
+
+#DATA TRANSFORMATION: CONVERT COLUMNS DATA TYPES
+#NO ACTION NEEDED
+
+#DATA TRANSFORMATION: APPLY FILTER
+#NO ACTION NEEDED
+
+#DATA VALIDITY - CHECK FREQUENCY DISTRIBUTION FOR NUMERICAL AND CATEGORICAL DATA FOR INCONSISTENCY
+print('DATA VALIDITY - CHECK FREQUENCY DISTRIBUTION FOR INCONSISTENCY')
+showDF(count(groupBy(ukc, "Country")))
+print("--------------------------------------------------------------------------------")
+showDF(count(groupBy(ukc, "Year")))
+print("--------------------------------------------------------------------------------")
+showDF(count(groupBy(ukc, "Month")))
+print("--------------------------------------------------------------------------------")
+showDF(describe(ukc, 'NoofCrimes'))
+print("--------------------------------------------------------------------------------")
+
+#DATA VALIDITY - CHECK NULL VALUES IN EACH COLUMN IN DATA FRAME
+paste("NUMBER OF NULL RECORDS IN COUNTRY COLUMN IS: ",nrow(SparkR::filter(ukc, isNull(ukc$Country))))
+paste("NUMBER OF NULL RECORDS IN YEAR COLUMN IS: ",nrow(SparkR::filter(ukc, isNull(ukc$Year))))
+paste("NUMBER OF NULL RECORDS IN MONTH COLUMN IS: ",nrow(SparkR::filter(ukc, isNull(ukc$Month))))
+paste("NUMBER OF NULL RECORDS IN NOOFCRIMES COLUMN IS: ",nrow(SparkR::filter(ukc, isNull(ukc$NoofCrimes))))
+print("--------------------------------------------------------------------------------")
+
+#DATA TRANSFORMATION: NULL VALUE TREATMENT
+ukc$Country = ifelse(isNull(ukc$Country)==TRUE, 'Undefined', ukc$Country)
+ukc$Year = ifelse(isNull(ukc$Year)==TRUE, -99, ukc$Year)
+ukc$Month = ifelse(isNull(ukc$Month)==TRUE, -99, ukc$Month)
+ukc$NoofCrimes = ifelse(isNull(ukc$NoofCrimes)==TRUE, -99, ukc$NoofCrimes)
+
+#DATA TRANSFORMATION: INVALID VALUE TREATMENT
+ukc$Country=regexp_replace(ukc$Country,'NA',"Undefined")
+
+#DATA TRANSFORMATION: BLANK/SPACE DETECTED --> BY FREQUENCY DISTRIBUTION
+ukc$Country = ifelse(trim(ukc$Country)=='', 'Undefined', ukc$Country)
+
+#DATA VALIDITY - CHECK FREQUENCY DISTRIBUTION FOR NUMERICAL AND CATEGORICAL DATA AFTER NULL/INVALID DATA TREATMENT
+print('DATA VALIDITY - CHECK FREQUENCY DISTRIBUTION TO VALIDATE NULL/INVALID DATA TREATMENT PERFORMED')
+showDF(count(groupBy(ukc, "Country")))
+print("--------------------------------------------------------------------------------")
+showDF(count(groupBy(ukc, "Year")))
+print("--------------------------------------------------------------------------------")
+showDF(count(groupBy(ukc, "Month")))
+print("--------------------------------------------------------------------------------")
+showDF(describe(ukc, 'NoofCrimes'))
+print("--------------------------------------------------------------------------------")
+
+#DATA VALIDITY - CHECK DUPLICATE RECORDS
+print('DATA VALIDITY - CHECK DUPLICATE RECORDS')
+paste0("TOTAL RECORDS IN UK NATION CRIME DATAFRAME: ",nrow(ukc))
+paste0("DUPLICATE RECORDS IN UK NATION CRIME DATAFRAME: ",(nrow(ukc)-nrow(collect(distinct(ukc)))))
+print("--------------------------------------------------------------------------------")
+
+#DATA TRANSFORMATION: REMOVE DUPLICATE RECORDS
+ukc=distinct(ukc)
+
+#DATA VALIDITY - RECORDS AFTER DUPLICATES REMOVAL
+paste0('RECORDS AFTER DUPLICATES REMOVAL - ROWS: ',nrow(ukc),' COLUMNS: ',ncol(ukc))
+print("--------------------------------------------------------------------------------")
+
+#DATA VALIDITY - FINAL UK NATION CRIME TABLE ROWS AND COLUMNS AFTER TRANSFORMATION STAGE
+paste0('FINAL UK NATION CRIME TABLE ROWS AND COLUMNS AFTER TRANSFORMATION STAGE - ROWS: ',nrow(ukc),' COLUMNS: ',ncol(ukc))
+print("--------------------------------------------------------------------------------")
+
+#REGISTER SPARK DATAFRAME AS TEMP DATAFRAME - TO CREATE FACT DIMENSION SCHEMA CREATION
+createOrReplaceTempView(ukc, "ukc")
+
+print("TRANSFORMATION OF UK NATION CRIME DATAFRAME IS COMPLETED")

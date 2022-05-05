@@ -1,0 +1,148 @@
+%spark2.r
+#----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#**********************************	Author: ADMP Group 6	******************************************
+#**********************************	Date  : 14 Apr 2022	    ******************************************
+#----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#Section 3: TRANSFORMATION STAGE - YORKSHIRE AND HUMBER OUTCOME DATAFRAME
+#----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+#DATA VALIDITY - RECORDS BEFORE APPLYING TRANSFORMATIONS
+paste0('RECORDS BEFORE APPLYING TRANSFORMATIONS - ROWS: ',nrow(oc),' COLUMNS: ',ncol(oc))
+print("--------------------------------------------------------------------------------")
+
+#DATA TRANSFORMATION: EXTRACT DATE COLUMNS USING SUBSTRING FUNCTION
+oc$Year = substr(oc$Month, 1, 4)
+oc$Month = substr(oc$Month, 6, 7)
+
+#REMOVE ORIGINAL COLUMNS WHICH ARE NOT NEEDED
+oc$Reportedby = NULL
+oc$Fallswithin = NULL
+oc$Longitude = NULL
+oc$Latitude = NULL
+oc$Location = NULL
+oc$LSOAcode = NULL
+oc$LSOAname = NULL
+
+#DATA VALIDITY - CHECK DATA TYPE OF EACH COLUMN
+print('DATA VALIDITY - CHECK DATATYPES OF EACH COLUMN')
+str(oc)
+print("--------------------------------------------------------------------------------")
+
+#DATA TRANSFORMATION: CONVERT COLUMNS DATA TYPES
+oc$Year <- SparkR::cast(oc$Year, "double")
+oc$Month <- SparkR::cast(oc$Month, "double")
+
+#DATA TRANSFORMATION: APPLY FILTER FOR ANALYSIS PERIOD GREATER THAN OR EQUAL TO 2020
+oc=subset(oc, oc$Year >= 2020)
+
+#DATA VALIDITY - RECORDS AFTER APPLYING FILTER
+paste0('RECORDS AFTER FILTERING FOR ANALYSIS PERIOD GREATER THAN OR EQUAL TO 2020 - ROWS: ',nrow(oc),' COLUMNS: ',ncol(oc))
+print("--------------------------------------------------------------------------------")
+
+#DATA VALIDITY - CHECK FREQUENCY DISTRIBUTION FOR NUMERICAL AND CATEGORICAL DATA FOR INCONSISTENCY
+print('DATA VALIDITY - CHECK FREQUENCY DISTRIBUTION FOR INCONSISTENCY')
+showDF(count(groupBy(oc, "Year")))
+print("--------------------------------------------------------------------------------")
+showDF(count(groupBy(oc, "Month")))
+print("--------------------------------------------------------------------------------")
+showDF(count(groupBy(oc, "Outcometype")))
+print("--------------------------------------------------------------------------------")
+
+#DATA VALIDITY - CHECK NULL VALUES IN EACH COLUMN IN DATA FRAME
+paste("NUMBER OF NULL RECORDS IN CRIMEID COLUMN IS: ",nrow(SparkR::filter(oc, isNull(oc$CrimeID))))
+paste("NUMBER OF NULL RECORDS IN YEAR COLUMN IS: ",nrow(SparkR::filter(oc, isNull(oc$Year))))
+paste("NUMBER OF NULL RECORDS IN MONTH COLUMN IS: ",nrow(SparkR::filter(oc, isNull(oc$Month))))
+paste("NUMBER OF NULL RECORDS IN OUTCOMETYPE COLUMN IS: ",nrow(SparkR::filter(oc, isNull(oc$Outcometype))))
+print("--------------------------------------------------------------------------------")
+
+#DATA TRANSFORMATION: NULL VALUE TREATMENT
+oc$Year = ifelse(isNull(oc$Year)==TRUE, -99, oc$Year)
+oc$Month = ifelse(isNull(oc$Month)==TRUE, -99, oc$Month)
+oc$Outcometype = ifelse(isNull(oc$Outcometype)==TRUE, 'Undefined', oc$Outcometype)
+print("--------------------------------------------------------------------------------")
+
+#DATA TRANSFORMATION: INVALID VALUE TREATMENT
+oc$Outcometype=regexp_replace(oc$Outcometype,'NA',"Undefined")
+
+#DATA TRANSFORMATION: BLANK/SPACE DETECTED --> BY FREQUENCY DISTRIBUTION
+oc$Outcometype = ifelse(trim(oc$Outcometype)=='', 'Undefined', oc$Outcometype)
+
+#DATA TRANSFORMATION: DELETE CRIMEID - ID VARIABLE, IF NULL IS PRESENT
+oc=dropna(oc, how = "any")
+
+#DATA TRANSFORMATION: DELETE CRIMEID VARIABLE LESS THAN STANDARD LENGTH 64
+oc$flag = ifelse(length(oc$CrimeID) < 64, 'True', 'False')
+print('DATA VALIDITY - FREQUENCY DISTRIBUTION - CRIMEID LESSTHAN 64 CHARACTERS')
+showDF(count(groupBy(oc, "flag")))
+oc=subset(oc, oc$flag == 'False')
+oc$flag = NULL
+
+#DATA TRANSFORMATION: REMOVE RECORDS WITH MORETHAN SINGLE OUTCOME IN SAME YEAR MONTH
+#A SparkDataFrame can also be registered as a temporary view in Spark SQL and that allows you to run SQL queries over its data. The sql function enables applications to run SQL queries programmatically and returns
+#the result as a SparkDataFrame.
+createOrReplaceTempView(oc, "oc")
+
+#SQL Query
+oc1 <- sql("select CrimeID, Max(Year) as MaxYear, Max(Month) as MaxMonth from oc group by  CrimeID")
+
+createOrReplaceTempView(oc1, "oc1")
+
+ocfinal <- sql("select a.* from oc a inner join oc1 b on a.CrimeID=b.CrimeID and a.Year=b.MaxYear and a.Month=b.MaxMonth")
+
+rm(oc, oc1)
+
+#Certain CrimeID's have different outcomes for same Year and Month. Hence, CrimeID which 1st occurence is taken for analysis
+ocfinal=dropDuplicates(ocfinal, "CrimeID")
+
+#DATA VALIDITY - REMOVE NULL ID RECORDS 
+paste0('RECORDS AFTER INVALID CRIMEID REMOVAL AND RECENT OUTCOME PER CRIMEID - ROWS: ',nrow(ocfinal),' COLUMNS: ',ncol(ocfinal))
+print("--------------------------------------------------------------------------------")
+
+#DATA VALIDITY - CHECK FREQUENCY DISTRIBUTION FOR NUMERICAL AND CATEGORICAL DATA AFTER NULL/INVALID DATA TREATMENT
+print('DATA VALIDITY - CHECK FREQUENCY DISTRIBUTION TO VALIDATE NULL/INVALID DATA TREATMENT PERFORMED')
+showDF(count(groupBy(ocfinal, "Year")))
+print("--------------------------------------------------------------------------------")
+showDF(count(groupBy(ocfinal, "Month")))
+print("--------------------------------------------------------------------------------")
+showDF(count(groupBy(ocfinal, "Outcometype")))
+print("--------------------------------------------------------------------------------")
+
+#DATA VALIDITY - CHECK DUPLICATE RECORDS
+print('DATA VALIDITY - CHECK DUPLICATE RECORDS')
+paste0("TOTAL RECORDS IN OUTCOME DATAFRAME: ",nrow(ocfinal))
+nodup=distinct(ocfinal)
+paste0("DUPLICATE RECORDS IN OUTCOME DATAFRAME: ",(nrow(ocfinal)-nrow(nodup)))
+print("--------------------------------------------------------------------------------")
+rm(nodup)
+
+#DATA TRANSFORMATION: REMOVE DUPLICATE RECORDS
+ssf=distinct(ocfinal)
+
+#DATA VALIDITY - RECORDS AFTER DUPLICATES REMOVAL
+paste0('RECORDS AFTER DUPLICATES REMOVAL - ROWS: ',nrow(ocfinal),' COLUMNS: ',ncol(ocfinal))
+print("--------------------------------------------------------------------------------")
+
+#DATA VALIDITY - FINAL STOP SEARCH TABLE ROWS AND COLUMNS AFTER TRANSFORMATION STAGE
+paste0('FINAL OUTCOME TABLE ROWS AND COLUMNS AFTER TRANSFORMATION STAGE - ROWS: ',nrow(ocfinal),' COLUMNS: ',ncol(ocfinal))
+print("--------------------------------------------------------------------------------")
+
+#REGISTER SPARK DATAFRAME AS TEMP DATAFRAME - TO CREATE FACT DIMENSION SCHEMA CREATION
+createOrReplaceTempView(ocfinal, "ocfinal")
+
+print("TRANSFORMATION OF OUTCOME DATAFRAME IS COMPLETED")
+
+#Scenario-1: Outcome Duplicate Sample
+#-------------------------------------
+# CrimeID
+# e9ff6a15dec4ec79aa13dca06a5a1afa0beed909b605a428788eda1a9d23c184
+# 2020-08
+# West Yorkshire Police
+
+# Scenario-2: Outcome Type Duplicates:
+#-------------------------------------
+# 0257496e011c0525f40f9e1a908475917a4d5ade87523db62709a51174628631
+# outcome changes by month year for same person. Hence, most recent should be retrieved.
+
+# Scenario-3: Outcome Type Duplicates - Single Person has different outcome in same year and month:
+#-------------------------------------
+# a5a6b5b322e36983b68d2d9630bdb64d9a5008245691c261030c3216701178b4

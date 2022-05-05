@@ -1,0 +1,150 @@
+%spark2.r
+#----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#**********************************	Author: ADMP Group 6	******************************************
+#**********************************	Date  : 14 Apr 2022	    ******************************************
+#----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#Section 3: TRANSFORMATION STAGE - YORKSHIRE AND HUMBER STOP SEARCH DATAFRAME
+#----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+#DATA VALIDITY - RECORDS BEFORE APPLYING TRANSFORMATIONS
+paste0('RECORDS BEFORE APPLYING TRANSFORMATIONS - ROWS: ',nrow(ssf),' COLUMNS: ',ncol(ssf))
+print("--------------------------------------------------------------------------------")
+
+#DATA TRANSFORMATION: EXTRACT DATE COLUMNS
+
+#USE DATE FUNCTION TO EXTRACT DATE COLUMNS
+ssf$Year=year(ssf$Date)
+ssf$Month=month(ssf$Date)
+
+#REMOVE ORIGINAL COLUMNS WHICH ARE NOT NEEDED
+ssf$Date = NULL
+ssf$Partofapolicingoperation =NULL
+ssf$Policingoperation = NULL
+ssf$Latitude = NULL
+ssf$Longitude = NULL
+ssf$Gender = NULL
+ssf$Agerange = NULL
+ssf$Legislation = NULL
+ssf$Outcomelinkedtoobjectofsearch = NULL
+ssf$Removalofmorethanjustouterclothing = NULL
+ssf$Fallswithin = NULL
+ssf$Officerdefinedethnicity = NULL
+ssf$Objectofsearch = NULL
+ssf$Type = NULL
+
+#DATA TRANSFORMATION: STANDARDIZE COLUMN VALUES
+ssf$Selfdefinedethnicity =  ifelse(ssf$Selfdefinedethnicity=='Asian/Asian British - Any other Asian background', 'Any other Asian', 
+                            ifelse(ssf$Selfdefinedethnicity=='Asian/Asian British - Bangladeshi', 'Bangladeshi',
+                            ifelse(ssf$Selfdefinedethnicity=='Asian/Asian British - Chinese', 'Chinese',
+                            ifelse(ssf$Selfdefinedethnicity=='Asian/Asian British - Indian', 'Indian',
+                            ifelse(ssf$Selfdefinedethnicity=='Asian/Asian British - Pakistani', 'Pakistani',
+                            ifelse(ssf$Selfdefinedethnicity=='Black/African/Caribbean/Black British - African', 'African',
+                            ifelse(ssf$Selfdefinedethnicity=='Black/African/Caribbean/Black British - Any other Black/African/Caribbean background', 'Any other African Caribbean',
+                            ifelse(ssf$Selfdefinedethnicity=='Black/African/Caribbean/Black British - Caribbean', 'Caribbean',
+                            ifelse(ssf$Selfdefinedethnicity=='Mixed/Multiple ethnic groups - Any other Mixed/Multiple ethnic background', 'Any other Mixed',
+                            ifelse(ssf$Selfdefinedethnicity=='Mixed/Multiple ethnic groups - White and Asian', 'White and Asian',
+                            ifelse(ssf$Selfdefinedethnicity=='Mixed/Multiple ethnic groups - White and Black African', 'White and Black African',
+                            ifelse(ssf$Selfdefinedethnicity=='Mixed/Multiple ethnic groups - White and Black Caribbean', 'White and Black Caribbean',
+                            ifelse(ssf$Selfdefinedethnicity=='Other ethnic group - Any other ethnic group', 'Any other ethnic group',
+                            ifelse(ssf$Selfdefinedethnicity=='Other ethnic group - Arab', 'Arab',
+                            ifelse(ssf$Selfdefinedethnicity=='Other ethnic group - Not stated', 'Other ethnic group Not stated',
+                            ifelse(ssf$Selfdefinedethnicity=='White - Any other White background', 'Any other White',
+                            ifelse(ssf$Selfdefinedethnicity=='White - English/Welsh/Scottish/Northern Irish/British', 'English/Welsh/Scottish/Northern Irish/British',
+                            ifelse(ssf$Selfdefinedethnicity=='White - Gypsy or Irish Traveller', 'Gypsy or Irish Traveller',
+                            ifelse(ssf$Selfdefinedethnicity=='White - Irish', 'Irish', 'Undefined')))))))))))))))))))
+
+
+#EXTRACT NUMBER OF STOP SEARCHES FROM GROUPING COLUMNS
+#A SparkDataFrame can also be registered as a temporary view in Spark SQL and that allows you to run SQL queries over its data. The sql function enables applications to run SQL queries programmatically and returns
+#the result as a SparkDataFrame.
+createOrReplaceTempView(ssf, "ssf")
+
+#SQL Query
+ssf <- sql("select Year, Month, Selfdefinedethnicity, Outcome, count(*) as NoofStopsearch from ssf group by Year, Month, Selfdefinedethnicity, Outcome")
+
+#DATA VALIDITY - CHECK DATA TYPE OF EACH COLUMN
+print('DATA VALIDITY - CHECK DATATYPES OF EACH COLUMN')
+str(ssf)
+print("--------------------------------------------------------------------------------")
+
+#DATA TRANSFORMATION: CONVERT COLUMNS DATA TYPES 
+#NO ACTION NEEDED
+
+#DATA TRANSFORMATION: APPLY FILTER FOR ANALYSIS PERIOD GREATER THAN OR EQUAL TO 2020
+ssf=subset(ssf, ssf$Year >= 2020)
+
+#DATA VALIDITY - RECORDS AFTER APPLYING FILTER
+paste0('RECORDS AFTER FILTERING FOR ANALYSIS PERIOD GREATER THAN OR EQUAL TO 2020 - ROWS: ',nrow(ssf),' COLUMNS: ',ncol(ssf))
+print("--------------------------------------------------------------------------------")
+
+#DATA VALIDITY - CHECK FREQUENCY DISTRIBUTION FOR NUMERICAL AND CATEGORICAL DATA FOR INCONSISTENCY
+print('DATA VALIDITY - CHECK FREQUENCY DISTRIBUTION FOR INCONSISTENCY')
+showDF(count(groupBy(ssf, "Year")))
+print("--------------------------------------------------------------------------------")
+showDF(count(groupBy(ssf, "Month")))
+print("--------------------------------------------------------------------------------")
+showDF(count(groupBy(ssf, "Selfdefinedethnicity")))
+print("--------------------------------------------------------------------------------")
+showDF(count(groupBy(ssf, "Outcome")))
+print("--------------------------------------------------------------------------------")
+showDF(describe(ssf, 'NoofStopsearch'))
+print("--------------------------------------------------------------------------------")
+
+#DATA VALIDITY - CHECK NULL VALUES IN EACH COLUMN IN DATA FRAME
+paste("NUMBER OF NULL RECORDS IN YEAR COLUMN IS: ",nrow(SparkR::filter(ssf, isNull(ssf$Year))))
+paste("NUMBER OF NULL RECORDS IN MONTH COLUMN IS: ",nrow(SparkR::filter(ssf, isNull(ssf$Month))))
+paste("NUMBER OF NULL RECORDS IN SELFDEFINEDETHNICITY COLUMN IS: ",nrow(SparkR::filter(ssf, isNull(ssf$Selfdefinedethnicity))))
+paste("NUMBER OF NULL RECORDS IN OUTCOME COLUMN IS: ",nrow(SparkR::filter(ssf, isNull(ssf$Outcome))))
+paste("NUMBER OF NULL RECORDS IN NOOFSTOPSEARCH COLUMN IS: ",nrow(SparkR::filter(ssf, isNull(ssf$NoofStopsearch))))
+print("--------------------------------------------------------------------------------")
+
+#DATA TRANSFORMATION: NULL VALUE TREATMENT
+ssf$Year = ifelse(isNull(ssf$Year)==TRUE, -99, ssf$Year)
+ssf$Month = ifelse(isNull(ssf$Month)==TRUE, -99, ssf$Month)
+ssf$Selfdefinedethnicity = ifelse(isNull(ssf$Selfdefinedethnicity)==TRUE, 'Undefined', ssf$Selfdefinedethnicity)
+ssf$Outcome = ifelse(isNull(ssf$Outcome)==TRUE, 'Undefined', ssf$Outcome)
+ssf$NoofStopsearch = ifelse(isNull(ssf$NoofStopsearch)==TRUE, -99, ssf$NoofStopsearch)
+print("--------------------------------------------------------------------------------")
+
+#DATA TRANSFORMATION: INVALID VALUE TREATMENT
+ssf$Selfdefinedethnicity=regexp_replace(ssf$Selfdefinedethnicity,'NA',"Undefined")
+ssf$Outcome=regexp_replace(ssf$Outcome,'NA',"Undefined")
+
+#DATA TRANSFORMATION: BLANK/SPACE DETECTED --> BY FREQUENCY DISTRIBUTION
+ssf$Selfdefinedethnicity = ifelse(trim(ssf$Selfdefinedethnicity)=='', 'Undefined', ssf$Selfdefinedethnicity)
+ssf$Outcome = ifelse(trim(ssf$Outcome)=='', 'Undefined', ssf$Outcome)
+
+#DATA VALIDITY - CHECK FREQUENCY DISTRIBUTION FOR NUMERICAL AND CATEGORICAL DATA AFTER NULL/INVALID DATA TREATMENT
+print('DATA VALIDITY - CHECK FREQUENCY DISTRIBUTION TO VALIDATE NULL/INVALID DATA TREATMENT PERFORMED')
+showDF(count(groupBy(ssf, "Year")))
+print("--------------------------------------------------------------------------------")
+showDF(count(groupBy(ssf, "Month")))
+print("--------------------------------------------------------------------------------")
+showDF(count(groupBy(ssf, "Selfdefinedethnicity")))
+print("--------------------------------------------------------------------------------")
+showDF(count(groupBy(ssf, "Outcome")))
+print("--------------------------------------------------------------------------------")
+showDF(describe(ssf, 'NoofStopsearch'))
+print("--------------------------------------------------------------------------------")
+
+#DATA VALIDITY - CHECK DUPLICATE RECORDS
+print('DATA VALIDITY - CHECK DUPLICATE RECORDS')
+paste0("TOTAL RECORDS IN STOP SEARCH DATAFRAME: ",nrow(ssf))
+paste0("DUPLICATE RECORDS IN STOP SEARCH DATAFRAME: ",(nrow(ssf)-nrow(collect(distinct(ssf)))))
+print("--------------------------------------------------------------------------------")
+
+#DATA TRANSFORMATION: REMOVE DUPLICATE RECORDS
+ssf=distinct(ssf)
+
+#DATA VALIDITY - RECORDS AFTER DUPLICATES REMOVAL
+paste0('RECORDS AFTER DUPLICATES REMOVAL - ROWS: ',nrow(ssf),' COLUMNS: ',ncol(ssf))
+print("--------------------------------------------------------------------------------")
+
+#DATA VALIDITY - FINAL STOP SEARCH TABLE ROWS AND COLUMNS AFTER TRANSFORMATION STAGE
+paste0('FINAL STOP SEARCH TABLE ROWS AND COLUMNS AFTER TRANSFORMATION STAGE - ROWS: ',nrow(ssf),' COLUMNS: ',ncol(ssf))
+print("--------------------------------------------------------------------------------")
+
+#REGISTER SPARK DATAFRAME AS TEMP DATAFRAME - TO CREATE FACT DIMENSION SCHEMA CREATION
+createOrReplaceTempView(ssf, "ssf")
+
+print("TRANSFORMATION OF STOP SEARCH DATAFRAME IS COMPLETED")

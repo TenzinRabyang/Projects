@@ -1,0 +1,104 @@
+%spark2.r
+#----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#**********************************	Author: ADMP Group 6	******************************************
+#**********************************	Date  : 14 Apr 2022	    ******************************************
+#----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#Section 2: TRANSFORMATION STAGE - UNEMPLOYMENT DATAFRAME
+#----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+#DATA VALIDITY - RECORDS BEFORE APPLYING TRANSFORMATIONS
+paste0('RECORDS BEFORE APPLYING TRANSFORMATIONS - ROWS: ',nrow(unemp),' COLUMNS: ',ncol(unemp))
+print("--------------------------------------------------------------------------------")
+
+#DATA TRANSFORMATION: EXTRACT DATE COLUMNS
+
+#USE SUBSTRING FUNCTION TO EXTRACT DATE COLUMNS
+unemp$Year = substr(unemp$TimePeriod, 1, 4)
+unemp$Monthname = substr(unemp$TimePeriod, 6, 8)
+
+#CONVERT MMM STRING TO NUMERIC MONTH (MM) COLUMN
+unemp$Month = ifelse(unemp$Monthname=='JAN', 1, 
+                    ifelse(unemp$Monthname=='FEB', 2,
+                        ifelse(unemp$Monthname=='MAR', 3,
+                            ifelse(unemp$Monthname=='APR', 4,
+                                ifelse(unemp$Monthname=='MAY', 5,
+                                    ifelse(unemp$Monthname=='JUN', 6,
+                                        ifelse(unemp$Monthname=='JUL', 7,
+                                            ifelse(unemp$Monthname=='AUG', 8,
+                                                ifelse(unemp$Monthname=='SEP', 9,
+                                                    ifelse(unemp$Monthname=='OCT', 10,
+                                                        ifelse(unemp$Monthname=='NOV', 11, 12)))))))))))
+
+#REMOVE ORIGINAL COLUMNS WHICH ARE NOT NEEDED
+unemp$TimePeriod = NULL
+unemp$Monthname = NULL
+
+#DATA VALIDITY - CHECK DATA TYPE OF EACH COLUMN
+print('DATA VALIDITY - CHECK DATATYPES OF EACH COLUMN')
+str(unemp)
+print("--------------------------------------------------------------------------------")
+
+#DATA TRANSFORMATION: CONVERT COLUMNS DATA TYPES 
+unemp$Year <- SparkR::cast(unemp$Year, "double")
+
+#DATA TRANSFORMATION: APPLY FILTER FOR ANALYSIS PERIOD GREATER THAN OR EQUAL TO 2020
+unemp=subset(unemp, unemp$Year >= 2020)
+
+#DATA VALIDITY - RECORDS AFTER APPLYING FILTER
+paste0('RECORDS AFTER FILTERING FOR ANALYSIS PERIOD GREATER THAN OR EQUAL TO 2020 - ROWS: ',nrow(unemp),' COLUMNS: ',ncol(unemp))
+print("--------------------------------------------------------------------------------")
+
+#DATA VALIDITY - CHECK FREQUENCY DISTRIBUTION FOR NUMERICAL AND CATEGORICAL DATA FOR INCONSISTENCY
+print('DATA VALIDITY - CHECK FREQUENCY DISTRIBUTION FOR INCONSISTENCY')
+showDF(count(groupBy(unemp, "Year")))
+print("--------------------------------------------------------------------------------")
+showDF(count(groupBy(unemp, "Month")))
+print("--------------------------------------------------------------------------------")
+showDF(describe(unemp, 'UnemploymentRate'))
+print("--------------------------------------------------------------------------------")
+
+#DATA VALIDITY - CHECK NULL VALUES IN EACH COLUMN IN DATA FRAME
+paste("NUMBER OF NULL RECORDS IN YEAR COLUMN IS: ",nrow(SparkR::filter(unemp, isNull(unemp$Year))))
+paste("NUMBER OF NULL RECORDS IN MONTH COLUMN IS: ",nrow(SparkR::filter(unemp, isNull(unemp$Month))))
+paste("NUMBER OF NULL RECORDS IN UNEMPLOYMENTRATE COLUMN IS: ",nrow(SparkR::filter(unemp, isNull(unemp$UnemploymentRate))))
+print("--------------------------------------------------------------------------------")
+
+#DATA TRANSFORMATION: NULL VALUE TREATMENT
+unemp$Year = ifelse(isNull(unemp$Year)==TRUE, -99, unemp$Year)
+unemp$Month = ifelse(isNull(unemp$Month)==TRUE, -99, unemp$Month)
+unemp$UnemploymentRate = ifelse(isNull(unemp$UnemploymentRate)==TRUE, -99, unemp$UnemploymentRate)
+
+#DATA TRANSFORMATION: INVALID VALUE TREATMENT
+#NO INVALID VALUES DETECTED --> BY FREQUENCY DISTRIBUTION
+#NO BLANK/SPACE DETECTED --> BY FREQUENCY DISTRIBUTION
+
+#DATA VALIDITY - CHECK FREQUENCY DISTRIBUTION FOR NUMERICAL AND CATEGORICAL DATA AFTER NULL/INVALID DATA TREATMENT
+print('DATA VALIDITY - CHECK FREQUENCY DISTRIBUTION TO VALIDATE NULL/INVALID DATA TREATMENT PERFORMED')
+showDF(count(groupBy(unemp, "Year")))
+print("--------------------------------------------------------------------------------")
+showDF(count(groupBy(unemp, "Month")))
+print("--------------------------------------------------------------------------------")
+showDF(describe(unemp, 'UnemploymentRate'))
+print("--------------------------------------------------------------------------------")
+
+#DATA VALIDITY - CHECK DUPLICATE RECORDS
+print('DATA VALIDITY - CHECK DUPLICATE RECORDS')
+paste0("TOTAL RECORDS IN UNEMPLOYMENT DATAFRAME: ",nrow(unemp))
+paste0("DUPLICATE RECORDS IN UNEMPLOYMENT DATAFRAME: ",(nrow(unemp)-nrow(collect(distinct(unemp)))))
+print("--------------------------------------------------------------------------------")
+
+#DATA TRANSFORMATION: REMOVE DUPLICATE RECORDS
+unemp=distinct(unemp)
+
+#DATA VALIDITY - RECORDS AFTER DUPLICATES REMOVAL
+paste0('RECORDS AFTER DUPLICATES REMOVAL - ROWS: ',nrow(unemp),' COLUMNS: ',ncol(unemp))
+print("--------------------------------------------------------------------------------")
+
+#DATA VALIDITY - FINAL UNEMPLOYMENT TABLE ROWS AND COLUMNS AFTER TRANSFORMATION STAGE
+paste0('FINAL UNEMPLOYMENT TABLE ROWS AND COLUMNS AFTER TRANSFORMATION STAGE - ROWS: ',nrow(unemp),' COLUMNS: ',ncol(unemp))
+print("--------------------------------------------------------------------------------")
+
+#REGISTER SPARK DATAFRAME AS TEMP DATAFRAME - TO CREATE FACT DIMENSION SCHEMA CREATION
+createOrReplaceTempView(unemp, "unemp")
+
+print("TRANSFORMATION OF UNEMPLOYMENT DATAFRAME IS COMPLETED")
